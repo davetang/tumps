@@ -3,6 +3,73 @@ tumor purity simulation
 
 will only work on an HPC system. Can be easily adapted
 
+## Sambamba
+
+[Sambamba](https://github.com/biod/sambamba) is used to subsample and merge a tumour and normal BAM file. A binary can be downloaded from the [releases page](https://github.com/biod/sambamba/releases).
+
+```bash
+wget https://github.com/biod/sambamba/releases/download/v0.8.2/sambamba-0.8.2-linux-amd64-static.gz
+gunzip sambamba-0.8.2-linux-amd64-static.gz
+chmod 755 sambamba-0.8.2-linux-amd64-static
+ln -s sambamba-0.8.2-linux-amd64-static sambamba
+```
+
+Below is the relevant part of `tumps.sh` that performs the mixing.
+
+```bash
+PURITY=50
+SAMBAMBA=${HOME}/bin/sambamba
+TUMOR=tumour.bam
+NORMAL=normal.bam
+TUMOR_COVERAGE=70
+NORMAL_COVERAGE=30
+PURBAM=purity${PURITY}.bam
+
+echo "Calculating ${PURITY}% purity"
+RATIO=`echo "${PURITY} / 100" | bc -l`
+TCOV=`echo "${TUMOR_COVERAGE} * ${RATIO}" | bc -l`
+echo "Subsample tumor BAM to a ${PURITY}%. That is ${TCOV}x coverage"
+echo "$SAMBAMBA view -f bam -s $RATIO -o tumorOnly${PURITY}.bam.tmp $TUMOR"
+
+NCOV=`echo "${TUMOR_COVERAGE} - ${TCOV}" | bc -l`
+NPUR=`echo "${NCOV} / ${NORMAL_COVERAGE}" | bc -l`
+echo "Subsample ${NCOV}x coverage from normal BAM. That is $NPUR of the original"
+echo "$SAMBAMBA view -f bam -s $NPUR -o normalOnly${PURITY}.bam.tmp $NORMAL"
+
+echo "Merge both"
+echo "$SAMBAMBA merge $PURBAM tumorOnly${PURITY}.bam.tmp normalOnly${PURITY}.bam.tmp"
+```
+
+The output from above.
+
+```
+Calculating 50% purity
+Subsample tumor BAM to a 50%. That is 35.00000000000000000000x coverage
+/home/dtang/bin/sambamba view -f bam -s .50000000000000000000 -o tumorOnly50.bam.tmp tumour.bam
+Subsample 35.00000000000000000000x coverage from normal BAM. That is 1.16666666666666666666 of the original
+/home/dtang/bin/sambamba view -f bam -s 1.16666666666666666666 -o normalOnly50.bam.tmp normal.bam
+Merge both
+/home/dtang/bin/sambamba merge purity50.bam tumorOnly50.bam.tmp normalOnly50.bam.tmp
+```
+
+For `sambamba view` the options are:
+
+* `-f`, --format=sam|bam|json|unpack specify which format to use for output
+(default is SAM); unpack streams unpacked BAM
+* `-s`, --subsample=FRACTION subsample reads (read pairs)
+* `-o`, --output-filename specify output filename
+
+Note that `-s` can only subsample, i.e. accept a value up to 1.
+
+For `sambamba merge` the usage is  `<output.bam> <input1.bam> <input2.bam>`.
+
+## Improvements
+
+- [ ] Calculate coverage within the script.
+- [ ] Script assumes that normal and tumour samples have similar coverage.
+- [ ] Option to down-sample or up-size such that both BAM files have similar coverage.
+- [ ] Option to output back to FASTQ.
+
 ## Basic usage
 Required parameters are: 
 - Tumor BAM file
